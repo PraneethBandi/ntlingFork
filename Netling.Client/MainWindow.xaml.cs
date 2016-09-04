@@ -126,10 +126,15 @@ namespace Netling.Client
                 StatusProgressbar.Value = 0;
                 StatusProgressbar.Visibility = Visibility.Visible;
 
+                string request = "";
+                string body = "";
+
+                GetRawRequest(out request, out body);
+
                 if (count.HasValue)
-                    _task = Worker.Run(uri, count.Value, cancellationToken);
+                    _task = Worker.Run(uri, count.Value, cancellationToken, request, body);
                 else
-                    _task = Worker.Run(uri, threads, threadAffinity, pipelining, duration, cancellationToken);
+                    _task = Worker.Run(uri, threads, threadAffinity, pipelining, duration, cancellationToken, request, body);
 
                 _task.GetAwaiter().OnCompleted(async () =>
                 {
@@ -158,6 +163,47 @@ namespace Netling.Client
             {
                 if (_cancellationTokenSource != null && !_cancellationTokenSource.IsCancellationRequested)
                     _cancellationTokenSource.Cancel();
+            }
+        }
+
+        private void GetRawRequest(out string rawRequest, out string body)
+        {
+            rawRequest = "";
+            body = "";
+            string request = "";
+            bool bodybegin = false;
+            if (!string.IsNullOrEmpty(Request.Text))
+            {
+                for (int i = 0; i < Request.LineCount; i++)
+                {
+                    var linetxt = Request.GetLineText(i);
+                    if (string.IsNullOrEmpty(linetxt))
+                    {
+                        bodybegin = true;
+                        continue;
+                    }
+
+                    if (bodybegin && !string.IsNullOrEmpty(linetxt))
+                    {
+                        body = body + linetxt;
+                    }
+                    else
+                    {
+                        rawRequest = rawRequest + linetxt;
+                    }
+                }
+                //request = Request.Text.Trim().TrimEnd(new char[] { '\r', '\n' });
+                //var index = request.LastIndexOf("\r\n");
+                //if(index > 0)
+                //{
+                //    body = request.Substring(index).Trim(new char[] { '\r', '\n' });
+                //    rawRequest = request.Substring(0, index).Trim(new char[] { '\r', '\n' });
+                //}
+                //else
+                //{
+                //    rawRequest = request;
+                //    body = "";
+                //}
             }
         }
 

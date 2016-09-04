@@ -7,7 +7,7 @@ namespace Netling.Core.Models
 {
     public class WorkerResult
     {
-        public WorkerResult(Uri uri, int threads, bool threadAffinity, int pipelining, TimeSpan elapsed)
+        public WorkerResult(Uri uri, int threads, bool threadAffinity, int pipelining, TimeSpan elapsed, string rawRequest)
         {
             Url = uri.ToString();
             Threads = threads;
@@ -18,8 +18,10 @@ namespace Netling.Core.Models
             Histogram = new int[0];
             StatusCodes = new Dictionary<int, int>();
             Exceptions = new Dictionary<Type, int>();
+            RawRequest = rawRequest;
         }
 
+        public string RawRequest { get; private set; }
         public string Url { get; private set; }
         public int Threads { get; private set; }
         public bool ThreadAffinity { get; private set; }

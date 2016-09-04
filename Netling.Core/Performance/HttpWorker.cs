@@ -22,7 +22,7 @@ namespace Netling.Core.Performance
         private ResponseType _responseType;
         private byte[] _requestPipelining = null;
 
-        public HttpWorker(Uri uri, HttpMethod httpMethod = HttpMethod.Get, Dictionary<string, string> headers = null, byte[] data = null)
+        public HttpWorker(Uri uri, HttpMethod httpMethod = HttpMethod.Get, Dictionary<string, string> headers = null, byte[] data = null, byte[] request = null)
         {
             _buffer = new byte[8192];
             _bufferIndex = 0;
@@ -47,8 +47,11 @@ namespace Netling.Core.Performance
             }
             
             _endPoint = new IPEndPoint(ip, _uri.Port);
-            _request = Encoding.UTF8.GetBytes($"{httpMethod.ToString().ToUpper()} {_uri.PathAndQuery} HTTP/1.1\r\nAccept-Encoding: gzip, deflate, sdch\r\nHost: {_uri.Host}\r\nContent-Length: {contentLength}{headersString}\r\n\r\n");
 
+            _request = request != null 
+                ? request 
+                : Encoding.UTF8.GetBytes($"{httpMethod.ToString().ToUpper()} {_uri.PathAndQuery} HTTP/1.1\r\nAccept-Encoding: gzip, deflate, sdch\r\nHost: {_uri.Host}\r\nContent-Length: {contentLength}{headersString}\r\n\r\n"); 
+            
             if (data == null)
                 return;
 
@@ -224,8 +227,8 @@ namespace Netling.Core.Performance
             catch (SocketException) { }
             
             _client.NoDelay = true;
-            _client.SendTimeout = 10000;
-            _client.ReceiveTimeout = 10000;
+            _client.SendTimeout = 100000;
+            _client.ReceiveTimeout = 100000;
             _client.Connect(_endPoint);
             _stream = HttpHelper.GetStream(_client, _uri);
         }
