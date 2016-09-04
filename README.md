@@ -1,3 +1,7 @@
+
+This repo is a fork from https://github.com/hallatore/Netling
+
+
 Netling is a load tester client for easy web testing. It is extremely fast while using little CPU or memory.
 
 ### Requirements
