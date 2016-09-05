@@ -31,4 +31,16 @@ namespace Netling.Core.Models
             }
         }
     }
+
+    public class CombinedEndpointResult
+    {
+        public ConcurrentQueue<EndpointResult> EndpointResults { get; set; }
+        public TimeSpan Elapsed { get; set; }
+
+        public void processResults()
+        {
+            //to push it to server
+        }
+
+    }
 }

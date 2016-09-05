@@ -8,6 +8,8 @@ using Netling.Core;
 using Netling.Core.Models;
 using System.IO;
 using System.Text;
+using Netling.Core.Utils;
+using System.Collections.Generic;
 
 namespace Netling.ConsoleClient
 {
@@ -15,6 +17,7 @@ namespace Netling.ConsoleClient
     {
         static void Main(string[] args)
         {
+
             Thread.CurrentThread.CurrentUICulture = new CultureInfo("en");
             Thread.CurrentThread.CurrentCulture = new CultureInfo("en");
 
@@ -35,21 +38,38 @@ namespace Netling.ConsoleClient
 
             var extraArgs = p.Parse(args);
             var threadAffinity = extraArgs.Contains("-a");
-            var url = extraArgs.FirstOrDefault(e => e.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || e.StartsWith("https://", StringComparison.OrdinalIgnoreCase));
-            Uri uri = null;
 
-            string request = string.Empty;
-            string requestBody = string.Empty;
-            TryReadRawRequest(requestFile, out request, out requestBody);
-           
-            if (url != null && !Uri.TryCreate(url, UriKind.Absolute, out uri))
-                Console.WriteLine("Failed to parse URL");
-            else if (url != null && count.HasValue)
-                RunWithCount(uri, count.Value).Wait();
-            else if (url != null)
-                RunWithDuration(uri, threads, threadAffinity, pipelining, TimeSpan.FromSeconds(duration)).Wait();
-            else
-                ShowHelp();
+            if (requestFile.EndsWith(".txt"))
+            {
+                var url = extraArgs.FirstOrDefault(e => e.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || e.StartsWith("https://", StringComparison.OrdinalIgnoreCase));
+                Uri uri = null;
+
+                string request = string.Empty;
+                string requestBody = string.Empty;
+                TryReadRawRequest(requestFile, out request, out requestBody);
+
+                if (url != null && !Uri.TryCreate(url, UriKind.Absolute, out uri))
+                    Console.WriteLine("Failed to parse URL");
+                else if (url != null && count.HasValue)
+                    RunWithCount(uri, count.Value, request, requestBody).Wait();
+                else if (url != null)
+                    RunWithDuration(uri, threads, threadAffinity, pipelining, TimeSpan.FromSeconds(duration), request, requestBody).Wait();
+                else
+                    ShowHelp();
+            }
+            else if(requestFile.EndsWith(".saz"))
+            {
+                var requestsList = FiddlerTraceHelper.GetRequests(requestFile);
+                if (!requestsList.Any())
+                {
+                    Console.WriteLine("No requests in archive path");
+                    ShowHelp();
+                }
+                else if (count.HasValue)
+                    RunMultipleWithCount(requestsList, count.Value).Wait();
+                else
+                    RunMultipleWithDuration(requestsList, threads, threadAffinity, pipelining, TimeSpan.FromSeconds(duration)).Wait();
+            }
         }
 
         private static bool TryReadRawRequest(string file, out string request, out string body)
@@ -70,6 +90,8 @@ namespace Netling.ConsoleClient
                     {
                         if (lines[i].Trim() == string.Empty)
                         {
+                            if (bodyBegins) break;
+                            sbRequest.AppendLine(lines[i]);
                             bodyBegins = true;
                             continue;
                         }
@@ -111,6 +133,26 @@ namespace Netling.ConsoleClient
         {
             Console.WriteLine(StartRunWithDurationString, duration.TotalSeconds, uri, threads, pipelining, threadAffinity ? "ON" : "OFF");
             return Run(uri, threads, threadAffinity, pipelining, duration, null, requestString, body);
+        }
+
+        private static Task RunMultipleWithCount(List<Tuple<string, string, string>> requestsList, int count)
+        {
+            Console.WriteLine(StartRunWithCountString, count, "multipleRequests");
+            return Run(requestsList, 1, false, 1, TimeSpan.MaxValue, count);
+        }
+
+        private static Task RunMultipleWithDuration(List<Tuple<string, string, string>> requestsList, int threads, bool threadAffinity, int pipelining, TimeSpan duration, string requestString = "", string body = "")
+        {
+            Console.WriteLine(StartRunWithDurationString, duration.TotalSeconds, "multipleRequests", threads, pipelining, threadAffinity ? "ON" : "OFF");
+            return Run(requestsList, threads, threadAffinity, pipelining, duration, null);
+        }
+
+        private static async Task Run(List<Tuple<string, string, string>> requestsList, int threads, bool threadAffinity, int pipelining, TimeSpan duration, int? count)
+        {
+            CombinedEndpointResult result;
+            result = await Worker.Run(requestsList, threadAffinity, pipelining, duration, count, new CancellationToken());
+            result.processResults();
+            Console.WriteLine("Run completed.Check push url for resulsts");
         }
 
         private static async Task Run(Uri uri, int threads, bool threadAffinity, int pipelining, TimeSpan duration, int? count, string requestString, string body)
