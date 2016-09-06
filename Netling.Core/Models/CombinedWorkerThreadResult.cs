@@ -60,7 +60,7 @@ namespace Netling.Core.Models
                     var task = HttpHelper.Send($"{uri}/{runName}", payload);
                     tasks.Add(task);
                 }
-                Task.WaitAll(tasks.ToArray());
+                await Task.WhenAll(tasks);
                 return "service times sent";
             }
             catch (Exception ex)
