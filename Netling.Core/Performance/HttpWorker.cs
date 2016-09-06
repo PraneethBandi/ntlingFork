@@ -224,7 +224,9 @@ namespace Netling.Core.Performance
             {
                 _client.Client.IOControl(sioLoopbackFastPath, optionInValue, null);
             }
-            catch (SocketException) { }
+            catch (SocketException ex) {
+                Console.WriteLine(ex.ToString());
+            }
             
             _client.NoDelay = true;
             _client.SendTimeout = 100000;

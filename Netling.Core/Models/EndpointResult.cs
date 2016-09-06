@@ -14,10 +14,11 @@ namespace Netling.Core.Models
         public bool error { get; set; }
         public long responselength { get; set; }
         public string uri { get; set; }
-        public int statuscode { get; set; }
+        public string statuscode { get; set; }
         public string exception { get; set; }
         public DateTime starttime { get; set; }
         public string id { get; set; }
+        public string runname { get; set; }
 
     }
 }

@@ -9,6 +9,7 @@ using Netling.Core.Models;
 using Netling.Core.Performance;
 using Netling.Core.Utils;
 using System.Text;
+using System.Net.Http;
 
 namespace Netling.Core
 {
@@ -44,6 +45,15 @@ namespace Netling.Core
             });
         }
 
+        public static Task<CombinedEndpointResult> Run(List<HttpRequestMessage> requestsList, bool threadAffinity, TimeSpan duration, int? count, CancellationToken cancellationToken)
+        {
+            return Task.Run(() =>
+            {
+                var combinedWorkerThreadResult = QueueWorkerThreads(requestsList, threadAffinity, duration, count, cancellationToken);
+                return combinedWorkerThreadResult;
+            });
+        }
+
         private static CombinedWorkerThreadResult QueueWorkerThreads(Uri uri, int threads, bool threadAffinity, int pipelining, TimeSpan duration, int? count, CancellationToken cancellationToken, string requestString, string body)
         {
             var results = new ConcurrentQueue<WorkerThreadResult>();
@@ -71,6 +81,40 @@ namespace Netling.Core
             sw.Stop();
 
             return new CombinedWorkerThreadResult(results, sw.Elapsed);
+        }
+
+        private static CombinedEndpointResult QueueWorkerThreads(List<HttpRequestMessage> requestsList, bool threadAffinity, TimeSpan duration, int? count, CancellationToken cancellationToken)
+        {
+            var results = new ConcurrentQueue<EndpointResult>();
+            var events = new List<ManualResetEventSlim>();
+            var sw = new Stopwatch();
+            sw.Start();
+            MultipleRequestsStore.HttpRequestMessageList = requestsList;
+
+            for (var i = 0; i < requestsList.Count; i++)
+            {
+                var resetEvent = new ManualResetEventSlim(false);
+
+                ThreadHelper.QueueThread(i, threadAffinity, (threadIndex) =>
+                {
+                    DoWork(duration, count, results, sw, cancellationToken, resetEvent, threadIndex);
+                });
+
+                events.Add(resetEvent);
+            }
+
+            for (var i = 0; i < events.Count; i += 50)
+            {
+                var group = events.Skip(i).Take(50).Select(r => r.WaitHandle).ToArray();
+                WaitHandle.WaitAll(group);
+            }
+            sw.Stop();
+
+            return new CombinedEndpointResult()
+            {
+                EndpointResults = results,
+                Elapsed = sw.Elapsed
+            };
         }
 
         private static CombinedEndpointResult QueueWorkerThreads(List<Tuple<string, string, string>> requestsList, bool threadAffinity, int pipelining, TimeSpan duration, int? count, CancellationToken cancellationToken)
@@ -117,10 +161,62 @@ namespace Netling.Core
                 error = false,
                 responselength = 0,
                 elapsed = 0,
-                statuscode = -1,
+                statuscode = "unknown",
                 exception = string.Empty,
                 starttime = DateTime.Now
             };
+        }
+
+        private static EndpointResult createResult(HttpRequestMessage request)
+        {
+            if (request == null)
+                return new EndpointResult();
+
+            return new EndpointResult()
+            {
+                request = request.ToString(),
+                body = request.Content?.ToString(),
+                uri = request.RequestUri.AbsoluteUri,
+                error = false,
+                responselength = 0,
+                elapsed = 0,
+                statuscode = "unknown",
+                exception = string.Empty,
+                starttime = DateTime.Now
+            };
+        }
+
+        private async static void DoWork(TimeSpan duration, int? count, ConcurrentQueue<EndpointResult> results, Stopwatch sw, CancellationToken cancellationToken, ManualResetEventSlim resetEvent, int workerIndex)
+        {
+            var sw2 = new Stopwatch();
+            var current = 0;
+
+            while (!cancellationToken.IsCancellationRequested && duration.TotalMilliseconds > sw.Elapsed.TotalMilliseconds && (!count.HasValue || current < count.Value))
+            {
+                current++;
+                HttpRequestMessage request = null;
+                try
+                {
+                    sw2.Restart();
+                    request = MultipleRequestsStore.GetHttpRequestMessage();
+                    var response = await Netling.Core.Utils.HttpHelper.Send(request);
+
+                    var result = createResult(request);
+                    var items = response.Split(new char[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
+                    result.elapsed = (float)sw2.ElapsedTicks / Stopwatch.Frequency * 1000;
+                    result.responselength = items.Length == 2 ? Convert.ToInt64(items[1]) : 0;
+                    result.statuscode = items.Length == 2 ? items[0] : "unknown";
+                    results.Enqueue(result);
+                }
+                catch (Exception ex)
+                {
+                    var result = createResult(request);
+                    result.exception = ex.ToString();
+                    result.error = true;
+                    results.Enqueue(result);
+                }
+            }
+            resetEvent.Set();
         }
 
         private static void DoWork(TimeSpan duration, int? count, int pipelining, ConcurrentQueue<EndpointResult> results, Stopwatch sw, CancellationToken cancellationToken, ManualResetEventSlim resetEvent, int workerIndex)
@@ -197,7 +293,7 @@ namespace Netling.Core
                         var result = createResult(request);
                         result.elapsed = (float)sw2.ElapsedTicks / Stopwatch.Frequency * 1000;
                         result.responselength = length;
-                        result.statuscode = statusCode;
+                        result.statuscode = statusCode.ToString();
                         results.Enqueue(result);
                     }
                     catch (Exception ex)
@@ -237,7 +333,7 @@ namespace Netling.Core
                             var result = createResult(request);
                             result.elapsed = (float)sw2.ElapsedTicks / Stopwatch.Frequency * 1000;
                             result.responselength = length;
-                            result.statuscode = statusCode;
+                            result.statuscode = statusCode.ToString();
                             results.Enqueue(result);
 
                             if (j == 0 && !cancellationToken.IsCancellationRequested && duration.TotalMilliseconds > sw.Elapsed.TotalMilliseconds)

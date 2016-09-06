@@ -9,14 +9,16 @@ namespace Netling.Core.Utils
 {
     public static class HttpHelper
     {
-        private static HttpClient httpClient = new HttpClient();
-
+        private static HttpClientHandler handler = new HttpClientHandler() { UseCookies = false };
+        private static HttpClient httpClient = new HttpClient(handler, false);
+        
         public static async Task<string> Send(HttpRequestMessage request)
         {
             try
             {
                 var response = await httpClient.SendAsync(request).ConfigureAwait(false);
-                return "sent sucessfully";
+                var respString = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+                return $"{response.StatusCode.ToString()}|{respString.Length}";
             }
             catch(Exception ex)
             {
@@ -36,5 +38,7 @@ namespace Netling.Core.Utils
                 return ex.ToString();
             }
         }
+
+
     }
 }

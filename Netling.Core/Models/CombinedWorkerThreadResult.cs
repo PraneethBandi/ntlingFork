@@ -40,14 +40,15 @@ namespace Netling.Core.Models
         public ConcurrentQueue<EndpointResult> EndpointResults { get; set; }
         public TimeSpan Elapsed { get; set; }
 
-        public async Task<string> processResults(string uri, string runName)
+        public async Task<string> processResults(string uri, string runName, string runId)
         {
             try
             {
                 EndpointResult[] data = EndpointResults.ToArray();
                 foreach (var item in data)
                 {
-                    item.id = runName;
+                    item.id = runId;
+                    item.runname = runName;
                 }
 
                 List<Task<string>> tasks = new List<Task<string>>();

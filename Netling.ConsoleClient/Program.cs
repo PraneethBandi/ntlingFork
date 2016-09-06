@@ -11,12 +11,14 @@ using System.Text;
 using Netling.Core.Utils;
 using System.Collections.Generic;
 using System.Configuration;
+using System.Net.Http;
 
 namespace Netling.ConsoleClient
 {
     class Program
     {
         private static string _runName = string.Empty;
+        private static string _runId = string.Empty;
         private static DateTime _startTime = DateTime.MinValue;
 
         static void Main(string[] args)
@@ -50,6 +52,23 @@ namespace Netling.ConsoleClient
             if(string.IsNullOrEmpty(_runName) || string.IsNullOrEmpty(requestFile))
             {
                 ShowHelp();
+                return;
+            }
+
+            if (extraArgs.Contains("-h"))
+            {
+                var requestsList = FiddlerTraceHelper.GetRequestMessages(requestFile);
+                if (requestsList.Any())
+                {
+                    if (count.HasValue)
+                        RunWithHttpClient(requestsList, 1, threadAffinity, TimeSpan.MaxValue, count).Wait();
+                    else
+                        RunWithHttpClient(requestsList, 1, threadAffinity, TimeSpan.FromSeconds(duration), count).Wait();
+                }
+                else
+                {
+                    Console.WriteLine("no requests to process");
+                }
                 return;
             }
 
@@ -172,7 +191,24 @@ namespace Netling.ConsoleClient
 
             Console.WriteLine("sending service results...");
             var serverUri = ConfigurationManager.AppSettings["BaseUri"] + ConfigurationManager.AppSettings["serviceResultsEndpoint"];
-            string response = await result.processResults(serverUri, _runName);
+            string response = await result.processResults(serverUri, _runName, _runId);
+            Console.WriteLine(response);
+
+            Console.WriteLine("Run completed.Check push url for resulsts");
+        }
+
+        private static async Task RunWithHttpClient(List<HttpRequestMessage> requestsList, int threads, bool threadAffinity, TimeSpan duration, int? count)
+        {
+            CombinedEndpointResult result;
+            _startTime = DateTime.Now;
+
+            result = await Worker.Run(requestsList, threadAffinity, duration, count, new CancellationToken());
+            await SendRunInfo(result.Elapsed.TotalSeconds);
+            Console.WriteLine("Run completed.pused run info to server");
+
+            Console.WriteLine("sending service results...");
+            var serverUri = ConfigurationManager.AppSettings["BaseUri"] + ConfigurationManager.AppSettings["serviceResultsEndpoint"];
+            string response = await result.processResults(serverUri, _runName, _runId);
             Console.WriteLine(response);
 
             Console.WriteLine("Run completed.Check push url for resulsts");
@@ -217,7 +253,7 @@ namespace Netling.ConsoleClient
                 starttime = _startTime
             };
 
-            _runName = run.id;
+            _runId = run.id;
             var serverUri = ConfigurationManager.AppSettings["BaseUri"] + ConfigurationManager.AppSettings["RunEndpoint"];
             var result = await HttpHelper.Send(serverUri, run);
             Console.WriteLine(result);
@@ -249,7 +285,7 @@ namespace Netling.ConsoleClient
         }
 
         private const string HelpString = @"
-Usage: netling [-t threads] [-d duration] [-p pipelining] [-a] -r <full file path> -n runName [url]
+Usage: netling [-t threads] [-d duration] [-p pipelining] [-a] [-h] -r <full file path> -n runName [url]
 
 Options:
     -t count        Number of threads to spawn.
@@ -259,11 +295,12 @@ Options:
     -a              Use thread affinity on the worker threads.
     -r string       Full path of the text file which contains raw request string that is being load tested. mandatory arg
     -n string       Run name - mandatory arg
+    -h              Run with httpclient instead of lowlevel Tcp sockets, some times tcp sockets error out :(.
 
 Examples: 
     netling http://localhost -n searchTest -t 8 -d 60 -r ""c:\temp\requests.txt""
     netling http://localhost -n apitest -c 3000 
-    netling http://localhost -n loadtest
+    netling http://localhost -n loadtest -h -r ""c:\temp\requests.txt""
 ";
 
         private const string StartRunWithCountString = @"
