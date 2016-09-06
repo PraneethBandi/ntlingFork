@@ -8,14 +8,16 @@ namespace Netling.Core.Models
 {
     public class EndpointResult
     {
-        public string Request { get; set; }
-        public string Body { get; set; }
+        public string request { get; set; }
+        public string body { get; set; }
         public float elapsed { get; set; }
-        public bool Error { get; set; }
-        public long ResponseLength { get; set; }
-        public string Uri { get; set; }
-        public int StatusCode { get; set; }
-        public string Exception { get; set; }
-        public long TimeStampTicks { get; set; }
+        public bool error { get; set; }
+        public long responselength { get; set; }
+        public string uri { get; set; }
+        public int statuscode { get; set; }
+        public string exception { get; set; }
+        public DateTime starttime { get; set; }
+        public string id { get; set; }
+
     }
 }

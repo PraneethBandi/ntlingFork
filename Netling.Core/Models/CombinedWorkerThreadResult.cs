@@ -1,6 +1,9 @@
+using System.Linq;
+using Netling.Core.Utils;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace Netling.Core.Models
 {
@@ -37,10 +40,42 @@ namespace Netling.Core.Models
         public ConcurrentQueue<EndpointResult> EndpointResults { get; set; }
         public TimeSpan Elapsed { get; set; }
 
-        public void processResults()
+        public async Task<string> processResults(string uri, string runName)
         {
-            //to push it to server
-        }
+            try
+            {
+                EndpointResult[] data = EndpointResults.ToArray();
+                foreach (var item in data)
+                {
+                    item.id = runName;
+                }
 
+                List<Task<string>> tasks = new List<Task<string>>();
+
+                for (var i = 0; i < data.Length; i += 50)
+                {
+                    var group = data.Skip(i).Take(50).ToArray();
+                    Dictionary<string, object> payload = new Dictionary<string, object>();
+                    payload.Add("data", group);
+                    var task = HttpHelper.Send($"{uri}/{runName}", payload);
+                    tasks.Add(task);
+                }
+                Task.WaitAll(tasks.ToArray());
+                return "service times sent";
+            }
+            catch (Exception ex)
+            {
+                return ex.ToString();
+            }
+        }
+    }
+
+    public class RunModel
+    {
+        public string id { get; set; }
+        public string name { get; set; }
+        public DateTime starttime { get; set; }
+        public double ellapsed { get; set; }
+        public string metadata { get; set; }
     }
 }

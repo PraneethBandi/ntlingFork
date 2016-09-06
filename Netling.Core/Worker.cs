@@ -111,15 +111,15 @@ namespace Netling.Core
         {
             return new EndpointResult()
             {
-                Request = request.Item2,
-                Body = request.Item3,
-                Uri = request.Item1,
-                Error = false,
-                ResponseLength = 0,
+                request = request.Item2,
+                body = request.Item3,
+                uri = request.Item1,
+                error = false,
+                responselength = 0,
                 elapsed = 0,
-                StatusCode = -1,
-                Exception = string.Empty,
-                TimeStampTicks = DateTime.Now.ToFileTimeUtc()
+                statuscode = -1,
+                exception = string.Empty,
+                starttime = DateTime.Now
             };
         }
 
@@ -196,15 +196,15 @@ namespace Netling.Core
 
                         var result = createResult(request);
                         result.elapsed = (float)sw2.ElapsedTicks / Stopwatch.Frequency * 1000;
-                        result.ResponseLength = length;
-                        result.StatusCode = statusCode;
+                        result.responselength = length;
+                        result.statuscode = statusCode;
                         results.Enqueue(result);
                     }
                     catch (Exception ex)
                     {
                         var result = createResult(request);
-                        result.Exception = ex.ToString();
-                        result.Error = true;
+                        result.exception = ex.ToString();
+                        result.error = true;
                         results.Enqueue(result);
                     }
                 }
@@ -220,8 +220,8 @@ namespace Netling.Core
                 catch (Exception ex)
                 {
                     var result = createResult(request);
-                    result.Exception = ex.ToString();
-                    result.Error = true;
+                    result.exception = ex.ToString();
+                    result.error = true;
                     results.Enqueue(result);
                 }
 
@@ -236,8 +236,8 @@ namespace Netling.Core
 
                             var result = createResult(request);
                             result.elapsed = (float)sw2.ElapsedTicks / Stopwatch.Frequency * 1000;
-                            result.ResponseLength = length;
-                            result.StatusCode = statusCode;
+                            result.responselength = length;
+                            result.statuscode = statusCode;
                             results.Enqueue(result);
 
                             if (j == 0 && !cancellationToken.IsCancellationRequested && duration.TotalMilliseconds > sw.Elapsed.TotalMilliseconds)
@@ -255,8 +255,8 @@ namespace Netling.Core
                     catch (Exception ex)
                     {
                         var result = createResult(request);
-                        result.Exception = ex.ToString();
-                        result.Error = true;
+                        result.exception = ex.ToString();
+                        result.error = true;
                         results.Enqueue(result);
                     }
                 }

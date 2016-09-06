@@ -10,13 +10,19 @@ using System.IO;
 using System.Text;
 using Netling.Core.Utils;
 using System.Collections.Generic;
+using System.Configuration;
 
 namespace Netling.ConsoleClient
 {
     class Program
     {
+        private static string _runName = string.Empty;
+        private static DateTime _startTime = DateTime.MinValue;
+
         static void Main(string[] args)
         {
+            //sendTestApiCall();
+            //return;
 
             Thread.CurrentThread.CurrentUICulture = new CultureInfo("en");
             Thread.CurrentThread.CurrentCulture = new CultureInfo("en");
@@ -26,6 +32,7 @@ namespace Netling.ConsoleClient
             var duration = 10;
             int? count = null;
             var requestFile = string.Empty;
+            //var runName = string.Empty;
 
             var p = new OptionSet()
             {
@@ -34,10 +41,17 @@ namespace Netling.ConsoleClient
                 {"d|duration=", (int v) => duration = v},
                 {"c|count=", (int? v) => count = v},
                 {"r|requestFile=", (string v) => requestFile = v},
+                {"n|runname=", (string v) => _runName = v}
             };
 
             var extraArgs = p.Parse(args);
             var threadAffinity = extraArgs.Contains("-a");
+
+            if(string.IsNullOrEmpty(_runName) || string.IsNullOrEmpty(requestFile))
+            {
+                ShowHelp();
+                return;
+            }
 
             if (requestFile.EndsWith(".txt"))
             {
@@ -150,9 +164,24 @@ namespace Netling.ConsoleClient
         private static async Task Run(List<Tuple<string, string, string>> requestsList, int threads, bool threadAffinity, int pipelining, TimeSpan duration, int? count)
         {
             CombinedEndpointResult result;
+            _startTime = DateTime.Now;
+
             result = await Worker.Run(requestsList, threadAffinity, pipelining, duration, count, new CancellationToken());
-            result.processResults();
+            await SendRunInfo(result.Elapsed.TotalSeconds);
+            Console.WriteLine("Run completed.pused run info to server");
+
+            Console.WriteLine("sending service results...");
+            var serverUri = ConfigurationManager.AppSettings["BaseUri"] + ConfigurationManager.AppSettings["serviceResultsEndpoint"];
+            string response = await result.processResults(serverUri, _runName);
+            Console.WriteLine(response);
+
             Console.WriteLine("Run completed.Check push url for resulsts");
+        }
+
+        private async static void sendTestApiCall()
+        {
+            var serverUri = ConfigurationManager.AppSettings["BaseUri"] + ConfigurationManager.AppSettings["serviceResultsEndpoint"];
+            string response = await HttpHelper.Send(serverUri, "sasdasd");
         }
 
         private static async Task Run(Uri uri, int threads, bool threadAffinity, int pipelining, TimeSpan duration, int? count, string requestString, string body)
@@ -175,6 +204,23 @@ namespace Netling.ConsoleClient
                 result.Min,
                 result.Max,
                 GetAsciiHistogram(result));
+        }
+
+        private static async Task SendRunInfo(double ellapsed)
+        {
+            RunModel run = new RunModel()
+            {
+                id = $"{_runName}_{DateTime.Now.ToFileTime()}",
+                name = _runName,
+                ellapsed = ellapsed,
+                metadata = "Test String... please update with correct run metadata details like env details, etc...",
+                starttime = _startTime
+            };
+
+            _runName = run.id;
+            var serverUri = ConfigurationManager.AppSettings["BaseUri"] + ConfigurationManager.AppSettings["RunEndpoint"];
+            var result = await HttpHelper.Send(serverUri, run);
+            Console.WriteLine(result);
         }
 
         private static string GetAsciiHistogram(WorkerResult workerResult)
@@ -203,7 +249,7 @@ namespace Netling.ConsoleClient
         }
 
         private const string HelpString = @"
-Usage: netling [-t threads] [-d duration] [-p pipelining] [-a] [-r <full file path>] url
+Usage: netling [-t threads] [-d duration] [-p pipelining] [-a] -r <full file path> -n runName [url]
 
 Options:
     -t count        Number of threads to spawn.
@@ -211,12 +257,13 @@ Options:
     -c count        Amount of requests to send on a single thread.
     -p count        Number of requests to pipeline.
     -a              Use thread affinity on the worker threads.
-    -r string       Full path of the text file which contains raw request string that is being load tested.
+    -r string       Full path of the text file which contains raw request string that is being load tested. mandatory arg
+    -n string       Run name - mandatory arg
 
 Examples: 
-    netling http://localhost -t 8 -d 60 -r ""c:\temp\requests.txt""
-    netling http://localhost -c 3000 
-    netling http://localhost
+    netling http://localhost -n searchTest -t 8 -d 60 -r ""c:\temp\requests.txt""
+    netling http://localhost -n apitest -c 3000 
+    netling http://localhost -n loadtest
 ";
 
         private const string StartRunWithCountString = @"
